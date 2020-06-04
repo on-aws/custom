@@ -42,15 +42,13 @@ Resources:
             const { Id } = event.ResourceProperties;
 
             try {
-              if (event.RequestType === 'Create') {
-                await route53.getHostedZone({ Id }).promise();
-              }
+              const { HostedZone } = await route53.getHostedZone({ Id }).promise();
+              await cfnResponse(event, 'SUCCESS', context.logStreamName, 'SUCCESS', { Name: HostedZone.Name.replace(/\.$/, '') });
+              return;
             } catch(err) {
               console.error(err);
-              const { HostedZone } = await cfnResponse(event, 'FAILED', context.logStreamName, err.message, {});
-              return;
             }
-            await cfnResponse(event, 'SUCCESS', context.logStreamName, 'SUCCESS', { Name: HostedZone.Name });
+            await cfnResponse(event, 'FAILED', context.logStreamName, err.message, {});
             return;
           };
 
