@@ -1,0 +1,109 @@
+Description:  CloudFormation Custom Resourses for Route53
+
+Parameters:
+  Tag:
+    Description: We tag all AWS resources for your convenience.
+    Type: String
+
+Resources:
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonRoute53ReadOnlyAccess
+
+  Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: nodejs12.x
+      Code:
+        ZipFile: !Sub |
+          'use strict';
+          const AWS   = require('aws-sdk');
+          const route53 = new AWS.Route53();
+          const https = require("https");
+          const url = require("url");
+
+          exports.handler = async (event, context) => {
+            console.log(JSON.stringify(event));
+            const { Id } = event.ResourceProperties;
+
+            try {
+              if (event.RequestType === 'Create') {
+                await route53.getHostedZone({ Id }).promise();
+              }
+            } catch(err) {
+              console.error(err);
+              const { HostedZone } = await cfnResponse(event, 'FAILED', context.logStreamName, err.message, {});
+              return;
+            }
+            await cfnResponse(event, 'SUCCESS', context.logStreamName, 'SUCCESS', { Name: HostedZone.Name });
+            return;
+          };
+
+          async function cfnResponse (event, responseStatus, PhysicalResourceId, Reason, Data) {
+            return new Promise((resolve, reject) => {
+              const responseBody = JSON.stringify({
+                Status: responseStatus,
+                Reason,
+                PhysicalResourceId,
+                StackId: event.StackId,
+                RequestId: event.RequestId,
+                LogicalResourceId: event.LogicalResourceId,
+                NoEcho: false,
+                Data
+              });
+
+              const parsedUrl = url.parse(event.ResponseURL);
+              const options = {
+                hostname: parsedUrl.hostname,
+                port: 443,
+                path: parsedUrl.path,
+                method: "PUT",
+                headers: {
+                  "content-type": "",
+                  "content-length": responseBody.length
+                }
+              };
+
+              const request = https.request(options, (response) => {
+                console.log("Status code: " + response.statusCode);
+                console.log("Status message: " + response.statusMessage);
+                resolve(response);
+              });
+
+              request.on('error', (err) => {
+                console.log({ err });
+                reject(err);
+              });
+
+              request.write(responseBody);
+              request.end();
+            });
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub Tag
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Lambda}
+      RetentionInDays: 7
+
+Outputs:
+  ServiceToken:
+    Value: !GetAtt Lambda.Arn
