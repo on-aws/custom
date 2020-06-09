@@ -1,12 +1,12 @@
-Description:  CloudFormayion Custom Reource to help with Amazon WorkSpaces creation
+Description:  CloudFormation Custom Reource to help with Amazon WorkSpaces creation
 
 Parameters:
   Tag:
-    Description: We tag all AWS resources for your convinience.
+    Description: We tag all AWS resources for your convenience.
     Type: String
 
 Resources:
-  !Transform
+  'Fn::Transform':
     Name: AWS::Include
     Parameters:
       Location : https://on-aws-us-east-1-master.s3.amazonaws.com/includes/cloudformation/response.yaml
