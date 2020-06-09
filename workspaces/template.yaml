@@ -6,6 +6,11 @@ Parameters:
     Type: String
 
 Resources:
+  !Transform
+    Name: AWS::Include
+    Parameters:
+      Location : https://on-aws-us-east-1-master.s3.amazonaws.com/includes/cloudformation/response.yaml
+
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -21,6 +26,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
       Policies:
         -
           PolicyName: !Ref AWS::StackName
@@ -79,8 +85,7 @@ Resources:
           'use strict';
           const AWS   = require('aws-sdk');
           const workspaces = new AWS.WorkSpaces();
-          const https = require("https");
-          const url = require("url");
+          const lambda = new AWS.Lambda();
 
           exports.handler = async (event, context) => {
             console.log(JSON.stringify(event));
@@ -104,11 +109,11 @@ Resources:
             } catch(err) {
               console.error(err);
               if (err.code !== 'ResourceNotFoundException' || event.RequestType !== 'Delete') {
-                await cfnResponse(event, 'FAILED', context.logStreamName, err.message);
+                await cfnResponse(event, 'FAILED', context.logStreamName, err.message, {});
                 return;
               }
             }
-            await cfnResponse(event, 'SUCCESS', context.logStreamName, 'SUCCESS');
+            await cfnResponse(event, 'SUCCESS', context.logStreamName, 'SUCCESS', {});
             return;
           };
 
@@ -125,45 +130,16 @@ Resources:
               return Promise.reject(state);
           }
 
-          async function cfnResponse (event, responseStatus, PhysicalResourceId, Reason) {
-            return new Promise((resolve, reject) => {
-              const responseBody = JSON.stringify({
-                Status: responseStatus,
-                Reason,
-                PhysicalResourceId,
-                StackId: event.StackId,
-                RequestId: event.RequestId,
-                LogicalResourceId: event.LogicalResourceId,
-                NoEcho: false,
-                Data: {}
-              });
+          function cfnResponse (event, Status, PhysicalResourceId, Reason, Data) {
+            event.Status = Status;
+            event.Reason = Reason;
+            event.Data = Data;
+            event.PhysicalResourceId = PhysicalResourceId;
 
-              const parsedUrl = url.parse(event.ResponseURL);
-              const options = {
-                hostname: parsedUrl.hostname,
-                port: 443,
-                path: parsedUrl.path,
-                method: "PUT",
-                headers: {
-                  "content-type": "",
-                  "content-length": responseBody.length
-                }
-              };
-
-              const request = https.request(options, (response) => {
-                console.log("Status code: " + response.statusCode);
-                console.log("Status message: " + response.statusMessage);
-                resolve(response);
-              });
-
-              request.on('error', (err) => {
-                console.log({ err });
-                reject(err);
-              });
-
-              request.write(responseBody);
-              request.end();
-            });
+            return lambda.invoke({
+              FunctionName: '${ResponseLambda}',
+              Payload: JSON.stringify(event)
+            }).promise();
           }
       Tags:
         - Key: App
