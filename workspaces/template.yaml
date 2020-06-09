@@ -9,7 +9,7 @@ Resources:
   'Fn::Transform':
     Name: AWS::Include
     Parameters:
-      Location : https://on-aws-us-east-1-master.s3.amazonaws.com/includes/cloudformation/response.yaml
+      Location : s3://on-aws-us-east-1-master/includes/cloudformation/response.yaml
 
   LambdaRole:
     Type: AWS::IAM::Role
