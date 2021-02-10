@@ -74,7 +74,7 @@ Resources:
               }).promise();
               const assumeConfig = new AWS.Config({
                 accessKeyId: Credentials.AccessKeyId,
-                secretAccessKey: Credentials.AccessKeyId,
+                secretAccessKey: Credentials.SecretAccessKey,
                 sessionToken : Credentials.SessionToken
               });
               const route53 = new AWS.Route53(assumeConfig);
@@ -83,8 +83,8 @@ Resources:
               return;
             } catch(err) {
               console.error(err);
+              await cfnResponse(event, 'FAILED', context.logStreamName, err.message, {});
             }
-            await cfnResponse(event, 'FAILED', context.logStreamName, err.message, {});
             return;
           };
 
