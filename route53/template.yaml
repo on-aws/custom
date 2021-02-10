@@ -58,7 +58,7 @@ Resources:
         ZipFile: !Sub |
           'use strict';
           const AWS   = require('aws-sdk');
-          const route53 = new AWS.Route53();
+          const sts = new AWS.STS();
           const https = require("https");
           const url = require("url");
 
@@ -67,6 +67,17 @@ Resources:
             const { Id } = event.ResourceProperties;
 
             try {
+              const { Credentials } = await sts.assumeRole({
+                RoleArn: 'arn:aws:iam::995124376790:role/iam-Route53Role-U0TD38WPWLWM',
+                RoleSessionName: 'Lambda',
+
+              }).promise();
+              const assumeConfig = new AWS.Config({
+                accessKeyId: Credentials.AccessKeyId,
+                secretAccessKey: Credentials.AccessKeyId,
+                sessionToken : Credentials.SessionToken
+              });
+              const route53 = new AWS.Route53(assumeConfig);
               const { HostedZone } = await route53.getHostedZone({ Id }).promise();
               await cfnResponse(event, 'SUCCESS', context.logStreamName, 'SUCCESS', { Name: HostedZone.Name.replace(/\.$/, '') });
               return;
